@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>5x5 LED matrix code for FiLeMa</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      margin-top: 0;
+      margin-bottom: 20px;
+    }
+
+    .main-container {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: flex-start;
+      width: 100%;
+      gap: 30px;
+    }
+
+    .board-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      flex-shrink: 0;
+    }
+
+    .module-board {
+      width: 320px;
+      height: 320px;
+      background-color: #1a1a1a;
+      clip-path: polygon(
+        20% 0%, 80% 0%, 
+        100% 20%, 100% 80%, 
+        80% 100%, 20% 100%, 
+        0% 80%, 0% 20%
+      );
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      padding: 20px;
+      user-select: none;
+    }
+
+    .pin-header {
+      display: flex;
+      gap: 4px;
+      position: absolute;
+      top: 15px;
+    }
+
+    .pin {
+      width: 12px;
+      height: 12px;
+      background-color: #888;
+      border-radius: 50%;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    .led {
+      width: 40px;
+      height: 24px;
+      background-color: #e0e0e0;
+      border: 1px solid #ccc;
+      cursor: pointer;
+    }
+
+    .led.on {
+      background-color: #b32d2d;
+      border-color: #8a2222;
+    }
+
+    .board-label-filema {
+      position: absolute;
+      bottom: 40px;
+      left: 22px;
+      color: #ffffff;
+      font-family: monospace;
+      font-size: 16px;
+      transform: rotate(45deg);
+      transform-origin: left bottom;
+    }
+
+    .board-label-unikits {
+      position: absolute;
+      bottom: 15px;
+      color: #ffffff;
+      font-family: monospace;
+      font-size: 18px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .controls button {
+      padding: 6px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .code-section {
+      display: flex;
+      flex-direction: column;
+      flex-grow: 1;
+    }
+
+    .code-section h3 {
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    textarea {
+      width: 100%;
+      height: 380px;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 10px;
+      box-sizing: border-box;
+      white-space: pre;
+      resize: vertical;
+    }
+
+    .copy-btn {
+      margin-top: 10px;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      align-self: flex-start;
+    }
+
+    footer {
+      position: fixed;
+      bottom: 10px;
+      right: 15px;
+      font-family: monospace;
+      font-size: 13px;
+      color: #666;
+    }
+
+    footer a {
+      color: #444;
+      text-decoration: none;
+    }
+
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>5x5 LED matrix code for FiLeMa</h1>
+
+  <div class="main-container">
+    <div class="board-section">
+      <div class="module-board">
+        <div class="pin-header">
+          <div class="pin"></div>
+          <div class="pin"></div>
+          <div class="pin"></div>
+          <div class="pin"></div>
+          <div class="pin"></div>
+        </div>
+
+        <div class="grid" id="matrixGrid"></div>
+
+        <div class="board-label-filema">FiLeMa</div>
+        <div class="board-label-unikits">UniKits</div>
+      </div>
+
+      <div class="controls">
+        <button onclick="undo()">Undo</button>
+        <button onclick="redo()">Redo</button>
+        <button onclick="clearGrid()">Clear</button>
+      </div>
+    </div>
+
+    <div class="code-section">
+      <h3>Generated Code:</h3>
+      <textarea id="codeOutput" readonly></textarea>
+      <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy Code</button>
+    </div>
+  </div>
+
+  <footer>
+    made by nugst | <a href="https://nugst.site" target="_blank" rel="noopener noreferrer">nugst.site</a>
+  </footer>
+
+  <script>
+    const ROWS = 5;
+    const COLS = 5;
+    let gridState = [
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0]
+    ];
+
+    let history = [JSON.stringify(gridState)];
+    let historyIndex = 0;
+
+    const matrixGrid = document.getElementById("matrixGrid");
+    const codeOutput = document.getElementById("codeOutput");
+    const copyBtn = document.getElementById("copyBtn");
+
+    function toggleLed(r, c) {
+      gridState[r][c] = gridState[r][c] === 1 ? 0 : 1;
+      saveState();
+      renderGrid();
+      generateCode();
+    }
+
+    function saveState() {
+      history = history.slice(0, historyIndex + 1);
+      history.push(JSON.stringify(gridState));
+      historyIndex++;
+    }
+
+    function undo() {
+      if (historyIndex > 0) {
+        historyIndex--;
+        gridState = JSON.parse(history[historyIndex]);
+        renderGrid();
+        generateCode();
+      }
+    }
+
+    function redo() {
+      if (historyIndex < history.length - 1) {
+        historyIndex++;
+        gridState = JSON.parse(history[historyIndex]);
+        renderGrid();
+        generateCode();
+      }
+    }
+
+    function clearGrid() {
+      gridState = [
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0]
+      ];
+      saveState();
+      renderGrid();
+      generateCode();
+    }
+
+    function renderGrid() {
+      matrixGrid.innerHTML = "";
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const led = document.createElement("div");
+          led.className = "led" + (gridState[r][c] === 1 ? " on" : "");
+
+          led.addEventListener("click", () => {
+            toggleLed(r, c);
+          });
+
+          matrixGrid.appendChild(led);
+        }
+      }
+    }
+
+    function toBinary8(val) {
+      return "0b" + val.toString(2).padStart(8, "0");
+    }
+
+    function generateCode() {
+      let colBody = "";
+      let colSteps = 0;
+
+      for (let c = 0; c < COLS; c++) {
+        let hasActiveLeds = false;
+        let portBVal = 0b11111111;
+
+        for (let r = 0; r < ROWS; r++) {
+          if (gridState[r][c] === 1) {
+            hasActiveLeds = true;
+            portBVal &= ~(1 << (4 - r));
+          }
+        }
+
+        if (hasActiveLeds) {
+          let portCVal = 1 << (4 - c);
+          colBody += `  PORTC = ${toBinary8(portCVal)};\n`;
+          colBody += `  PORTB = ${toBinary8(portBVal)};\n`;
+          colBody += `  _delay_ms(1);\n`;
+          colSteps++;
+        }
+      }
+
+      let rowBody = "";
+      let rowSteps = 0;
+
+      for (let r = 0; r < ROWS; r++) {
+        let hasActiveLeds = false;
+        let portCVal = 0b00000000;
+
+        for (let c = 0; c < COLS; c++) {
+          if (gridState[r][c] === 1) {
+            hasActiveLeds = true;
+            portCVal |= (1 << (4 - c));
+          }
+        }
+
+        if (hasActiveLeds) {
+          let portBVal = ~(1 << (4 - r)) & 0b11111111;
+          rowBody += `  PORTC = ${toBinary8(portCVal)};\n`;
+          rowBody += `  PORTB = ${toBinary8(portBVal)};\n`;
+          rowBody += `  _delay_ms(1);\n`;
+          rowSteps++;
+        }
+      }
+
+      let loopBody = (rowSteps > 0 && rowSteps <= colSteps) ? rowBody : colBody;
+
+      const code = `#include <avr/io.h>
+#include <avr/interrupt.h>
+
+int main(){\n  DDRB = 0b11111111;\n  DDRC = 0b11111111;\n  PORTB = 0b11111111;\n  PORTC = 0b00000000;\nwhile(1){\n${loopBody}}\n}`;
+
+      codeOutput.value = code;
+    }
+
+    function copyCode() {
+      navigator.clipboard.writeText(codeOutput.value).then(() => {
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.textContent = "Copy Code";
+        }, 1500);
+      });
+    }
+
+    renderGrid();
+    generateCode();
+  </script>
+</body>
+</html>
