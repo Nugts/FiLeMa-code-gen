@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>5x5 LED matrix code for FiLeMa</title>
+  <title>LED Matrix Code Generator</title>
+  <link rel="icon" href="filema-favicon.png">
   <style>
     body {
       font-family: sans-serif;
@@ -148,13 +149,126 @@
       align-self: flex-start;
     }
 
+    .timeline-section {
+      width: 100%;
+      margin-top: 20px;
+      background: #e6e6e6;
+      padding: 15px;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .timeline-header h4 {
+      margin: 0;
+    }
+
+    .timeline-toggle {
+      padding: 4px 10px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .filmstrip {
+      display: flex;
+      gap: 15px;
+      overflow-x: auto;
+      padding-bottom: 10px;
+    }
+
+    .filmstrip.hidden {
+      display: none;
+    }
+
+    .frame-card {
+      min-width: 90px;
+      height: 100px;
+      background: #fff;
+      border: 2px solid #ccc;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px;
+      cursor: pointer;
+      position: relative;
+    }
+
+    .frame-card.active {
+      border-color: #b32d2d;
+      background: #fdf5f5;
+    }
+
+    .frame-title {
+      font-size: 12px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    .delay-popup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-size: 11px;
+    }
+
+    .delay-popup input {
+      width: 50px;
+      text-align: center;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .add-frame-btn {
+      min-width: 90px;
+      height: 100px;
+      background: #d9d9d9;
+      border: 2px dashed #999;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 24px;
+      color: #555;
+    }
+
+    .add-frame-btn:hover {
+      background: #ccc;
+    }
+
+    .delete-btn {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      background: #ff4d4d;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      font-size: 10px;
+      cursor: pointer;
+      display: none;
+    }
+
+    .frame-card:hover .delete-btn {
+      display: block;
+    }
+
     footer {
-      position: fixed;
-      bottom: 10px;
-      right: 15px;
+      margin-top: 30px;
       font-family: monospace;
       font-size: 13px;
       color: #666;
+      text-align: right;
     }
 
     footer a {
@@ -169,7 +283,7 @@
 </head>
 <body>
 
-  <h1>5x5 LED matrix code for FiLeMa</h1>
+  <h1>LED Matrix Code Generator</h1>
 
   <div class="main-container">
     <div class="board-section">
@@ -191,7 +305,7 @@
       <div class="controls">
         <button onclick="undo()">Undo</button>
         <button onclick="redo()">Redo</button>
-        <button onclick="clearGrid()">Clear</button>
+        <button onclick="clearFrame()">Clear Frame</button>
       </div>
     </div>
 
@@ -202,6 +316,14 @@
     </div>
   </div>
 
+  <div class="timeline-section">
+    <div class="timeline-header">
+      <h4>Animation Frames</h4>
+      <button class="timeline-toggle" onclick="toggleTimeline()">Hide Slides</button>
+    </div>
+    <div class="filmstrip" id="filmstrip"></div>
+  </div>
+
   <footer>
     made by nugst | <a href="https://nugst.site" target="_blank" rel="noopener noreferrer">nugst.site</a>
   </footer>
@@ -209,79 +331,213 @@
   <script>
     const ROWS = 5;
     const COLS = 5;
-    let gridState = [
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 0]
-    ];
+    const MAX_FRAMES = 256;
+    const STORAGE_KEY_FRAMES = "filema_matrix_frames";
+    const STORAGE_KEY_INDEX = "filema_matrix_index";
 
-    let history = [JSON.stringify(gridState)];
-    let historyIndex = 0;
+    let frames = [];
+    let currentFrameIndex = 0;
+    
+    let history = [];
+    let historyIndex = -1;
 
     const matrixGrid = document.getElementById("matrixGrid");
     const codeOutput = document.getElementById("codeOutput");
     const copyBtn = document.getElementById("copyBtn");
+    const filmstrip = document.getElementById("filmstrip");
 
-    function toggleLed(r, c) {
-      gridState[r][c] = gridState[r][c] === 1 ? 0 : 1;
-      saveState();
-      renderGrid();
-      generateCode();
-    }
-
-    function saveState() {
-      history = history.slice(0, historyIndex + 1);
-      history.push(JSON.stringify(gridState));
-      historyIndex++;
-    }
-
-    function undo() {
-      if (historyIndex > 0) {
-        historyIndex--;
-        gridState = JSON.parse(history[historyIndex]);
-        renderGrid();
-        generateCode();
-      }
-    }
-
-    function redo() {
-      if (historyIndex < history.length - 1) {
-        historyIndex++;
-        gridState = JSON.parse(history[historyIndex]);
-        renderGrid();
-        generateCode();
-      }
-    }
-
-    function clearGrid() {
-      gridState = [
+    function getEmptyGrid() {
+      return [
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0]
       ];
+    }
+
+    function init() {
+      const savedFrames = localStorage.getItem(STORAGE_KEY_FRAMES);
+      const savedIndex = localStorage.getItem(STORAGE_KEY_INDEX);
+
+      if (savedFrames) {
+        frames = JSON.parse(savedFrames);
+        currentFrameIndex = savedIndex !== null ? parseInt(savedIndex) : 0;
+        if (currentFrameIndex >= frames.length) currentFrameIndex = 0;
+      } else {
+        frames = [{ grid: getEmptyGrid(), duration: 1000 }];
+        currentFrameIndex = 0;
+      }
+
+      saveState();
+      renderAll();
+    }
+
+    function saveToLocalStorage() {
+      localStorage.setItem(STORAGE_KEY_FRAMES, JSON.stringify(frames));
+      localStorage.setItem(STORAGE_KEY_INDEX, currentFrameIndex.toString());
+    }
+
+    function saveState() {
+      history = history.slice(0, historyIndex + 1);
+      history.push(JSON.stringify({ f: frames, i: currentFrameIndex }));
+      historyIndex++;
+      saveToLocalStorage();
+    }
+
+    function undo() {
+      if (historyIndex > 0) {
+        historyIndex--;
+        const state = JSON.parse(history[historyIndex]);
+        frames = state.f;
+        currentFrameIndex = state.i;
+        renderAll();
+      }
+    }
+
+    function redo() {
+      if (historyIndex < history.length - 1) {
+        historyIndex++;
+        const state = JSON.parse(history[historyIndex]);
+        frames = state.f;
+        currentFrameIndex = state.i;
+        renderAll();
+      }
+    }
+
+    function clearFrame() {
+      frames[currentFrameIndex].grid = getEmptyGrid();
+      saveState();
+      renderAll();
+    }
+
+    function toggleLed(r, c) {
+      const currentGrid = frames[currentFrameIndex].grid;
+      currentGrid[r][c] = currentGrid[r][c] === 1 ? 0 : 1;
       saveState();
       renderGrid();
       generateCode();
     }
 
+    function addFrame() {
+      if (frames.length >= MAX_FRAMES) {
+        alert("Reached limit of " + MAX_FRAMES + " frames.");
+        return;
+      }
+      frames.push({ grid: getEmptyGrid(), duration: 1000 });
+      currentFrameIndex = frames.length - 1;
+      saveState();
+      renderAll();
+    }
+
+    function selectFrame(index) {
+      currentFrameIndex = index;
+      saveToLocalStorage();
+      renderAll();
+    }
+
+    function updateDuration(index, value) {
+      let duration = parseInt(value);
+      if (isNaN(duration) || duration < 1) duration = 1;
+      frames[index].duration = duration;
+      saveState();
+      generateCode();
+    }
+
+    function deleteFrame(index) {
+      if (frames.length === 1) {
+        frames[0].grid = getEmptyGrid();
+      } else {
+        frames.splice(index, 1);
+        if (currentFrameIndex >= frames.length) {
+          currentFrameIndex = frames.length - 1;
+        } else if (currentFrameIndex > index) {
+          currentFrameIndex--;
+        }
+      }
+      saveState();
+      renderAll();
+    }
+
+    function toggleTimeline() {
+      const toggleBtn = document.querySelector(".timeline-toggle");
+      if (filmstrip.classList.contains("hidden")) {
+        filmstrip.classList.remove("hidden");
+        toggleBtn.textContent = "Hide Slides";
+      } else {
+        filmstrip.classList.add("hidden");
+        toggleBtn.textContent = "Show Slides";
+      }
+    }
+
     function renderGrid() {
       matrixGrid.innerHTML = "";
+      const currentGrid = frames[currentFrameIndex].grid;
       for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLS; c++) {
           const led = document.createElement("div");
-          led.className = "led" + (gridState[r][c] === 1 ? " on" : "");
-
+          led.className = "led" + (currentGrid[r][c] === 1 ? " on" : "");
           led.addEventListener("click", () => {
             toggleLed(r, c);
           });
-
           matrixGrid.appendChild(led);
         }
       }
+    }
+
+    function renderFilmstrip() {
+      filmstrip.innerHTML = "";
+      
+      frames.forEach((frame, index) => {
+        const card = document.createElement("div");
+        card.className = "frame-card" + (index === currentFrameIndex ? " active" : "");
+        
+        card.addEventListener("click", (e) => {
+          if (e.target.tagName !== "INPUT" && e.target.tagName !== "BUTTON") {
+            selectFrame(index);
+          }
+        });
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "delete-btn";
+        delBtn.textContent = "X";
+        delBtn.addEventListener("click", () => deleteFrame(index));
+
+        const title = document.createElement("div");
+        title.className = "frame-title";
+        title.textContent = "Frame " + (index + 1);
+
+        const delayDiv = document.createElement("div");
+        delayDiv.className = "delay-popup";
+        delayDiv.textContent = "Delay (ms)";
+        
+        const delayInput = document.createElement("input");
+        delayInput.type = "number";
+        delayInput.value = frame.duration;
+        delayInput.addEventListener("change", (e) => {
+          updateDuration(index, e.target.value);
+        });
+
+        delayDiv.appendChild(delayInput);
+        card.appendChild(delBtn);
+        card.appendChild(title);
+        card.appendChild(delayDiv);
+        filmstrip.appendChild(card);
+      });
+
+      if (frames.length < MAX_FRAMES) {
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-frame-btn";
+        addBtn.textContent = "+";
+        addBtn.addEventListener("click", addFrame);
+        filmstrip.appendChild(addBtn);
+      }
+    }
+
+    function renderAll() {
+      renderGrid();
+      renderFilmstrip();
+      generateCode();
     }
 
     function toBinary8(val) {
@@ -289,58 +545,77 @@
     }
 
     function generateCode() {
-      let colBody = "";
-      let colSteps = 0;
+      let mainLoopBody = "";
 
-      for (let c = 0; c < COLS; c++) {
-        let hasActiveLeds = false;
-        let portBVal = 0b11111111;
+      for (let f = 0; f < frames.length; f++) {
+        let gridState = frames[f].grid;
+        let duration = frames[f].duration;
 
-        for (let r = 0; r < ROWS; r++) {
-          if (gridState[r][c] === 1) {
-            hasActiveLeds = true;
-            portBVal &= ~(1 << (4 - r));
-          }
-        }
-
-        if (hasActiveLeds) {
-          let portCVal = 1 << (4 - c);
-          colBody += `  PORTC = ${toBinary8(portCVal)};\n`;
-          colBody += `  PORTB = ${toBinary8(portBVal)};\n`;
-          colBody += `  _delay_ms(1);\n`;
-          colSteps++;
-        }
-      }
-
-      let rowBody = "";
-      let rowSteps = 0;
-
-      for (let r = 0; r < ROWS; r++) {
-        let hasActiveLeds = false;
-        let portCVal = 0b00000000;
-
+        let colGroups = {};
         for (let c = 0; c < COLS; c++) {
-          if (gridState[r][c] === 1) {
-            hasActiveLeds = true;
-            portCVal |= (1 << (4 - c));
+          let portBVal = 0b11111111;
+          let hasActive = false;
+          for (let r = 0; r < ROWS; r++) {
+            if (gridState[r][c] === 1) {
+              hasActive = true;
+              portBVal &= ~(1 << (4 - r));
+            }
+          }
+          if (hasActive) {
+            if (!colGroups[portBVal]) colGroups[portBVal] = 0;
+            colGroups[portBVal] |= (1 << (4 - c));
           }
         }
 
-        if (hasActiveLeds) {
-          let portBVal = ~(1 << (4 - r)) & 0b11111111;
-          rowBody += `  PORTC = ${toBinary8(portCVal)};\n`;
-          rowBody += `  PORTB = ${toBinary8(portBVal)};\n`;
-          rowBody += `  _delay_ms(1);\n`;
-          rowSteps++;
+        let colSteps = Object.keys(colGroups).length;
+        let colBody = "";
+        for (let pb in colGroups) {
+          colBody += `    PORTC = ${toBinary8(colGroups[pb])};\n`;
+          colBody += `    PORTB = ${toBinary8(parseInt(pb))};\n`;
+          colBody += `    _delay_ms(1);\n`;
+        }
+
+        let rowGroups = {};
+        for (let r = 0; r < ROWS; r++) {
+          let portCVal = 0b00000000;
+          let hasActive = false;
+          for (let c = 0; c < COLS; c++) {
+            if (gridState[r][c] === 1) {
+              hasActive = true;
+              portCVal |= (1 << (4 - c));
+            }
+          }
+          if (hasActive) {
+            if (!rowGroups[portCVal]) rowGroups[portCVal] = 0b11111111;
+            rowGroups[portCVal] &= ~(1 << (4 - r));
+          }
+        }
+
+        let rowSteps = Object.keys(rowGroups).length;
+        let rowBody = "";
+        for (let pc in rowGroups) {
+          rowBody += `    PORTC = ${toBinary8(parseInt(pc))};\n`;
+          rowBody += `    PORTB = ${toBinary8(rowGroups[pc])};\n`;
+          rowBody += `    _delay_ms(1);\n`;
+        }
+
+        let frameInnerBody = (rowSteps > 0 && rowSteps <= colSteps) ? rowBody : colBody;
+        let steps = (rowSteps > 0 && rowSteps <= colSteps) ? rowSteps : colSteps;
+
+        if (steps === 1) {
+          let pLines = frameInnerBody.trim().split('\n');
+          mainLoopBody += `  ${pLines[0].trim()}\n  ${pLines[1].trim()}\n`;
+          mainLoopBody += `  for(int i = 1; i <= ${duration}; i++) {\n    _delay_ms(1);\n  }\n\n`;
+        } else if (steps > 1) {
+          let iterations = Math.floor(duration / steps);
+          if (iterations < 1) iterations = 1;
+          mainLoopBody += `  for(int i = 1; i <= ${iterations}; i++) {\n${frameInnerBody}  }\n\n`;
+        } else {
+          mainLoopBody += `  PORTC = 0b00000000;\n  PORTB = 0b11111111;\n  for(int i = 1; i <= ${duration}; i++) {\n    _delay_ms(1);\n  }\n\n`;
         }
       }
 
-      let loopBody = (rowSteps > 0 && rowSteps <= colSteps) ? rowBody : colBody;
-
-      const code = `#include <avr/io.h>
-#include <avr/interrupt.h>
-
-int main(){\n  DDRB = 0b11111111;\n  DDRC = 0b11111111;\n  PORTB = 0b11111111;\n  PORTC = 0b00000000;\nwhile(1){\n${loopBody}}\n}`;
+      const code = `#include <avr/io.h>\n#include <util/delay.h>\n\nint main(){\n  DDRB = 0b11111111;\n  DDRC = 0b11111111;\n  PORTB = 0b11111111;\n  PORTC = 0b00000000;\n  while(1){\n${mainLoopBody}  }\n}`;
 
       codeOutput.value = code;
     }
@@ -354,8 +629,7 @@ int main(){\n  DDRB = 0b11111111;\n  DDRC = 0b11111111;\n  PORTB = 0b11111111;\n
       });
     }
 
-    renderGrid();
-    generateCode();
+    init();
   </script>
 </body>
 </html>
